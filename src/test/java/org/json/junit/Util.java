@@ -117,4 +117,60 @@ public class Util {
             );
         }
     }
+
+    /**
+     * Builds a malformed XML document made only of <code>depth</code>
+     * unclosed, nested <code>&lt;a&gt;</code> tags.
+     * @param depth how many nested opening tags to produce
+     * @return the XML text
+     */
+    public static String deeplyNestedOpeningTags(int depth) {
+        return new String(new char[depth]).replace("\0", "<a>");
+    }
+
+    /**
+     * Builds a well-formed XML document made of <code>depth</code> nested
+     * <code>&lt;a&gt;</code> elements wrapping a single text value.
+     * @param depth how many nested elements to produce
+     * @return the XML text
+     */
+    public static String deeplyNestedWellFormedXml(int depth) {
+        return deeplyNestedOpeningTags(depth) + "value"
+                + new String(new char[depth]).replace("\0", "</a>");
+    }
+
+    /**
+     * Runs the given task on a dedicated thread with a large (8 MiB) stack and
+     * returns whatever it threw. The test JVM may be run with a small stack
+     * (for example -Xss512k), on which a few hundred levels of recursive XML
+     * parsing are already close to exhausting the stack; running deep-nesting
+     * checks on a large stack lets a test tell a parser depth guard apart from
+     * plain stack exhaustion.
+     * @param task the work to run
+     * @return the Throwable thrown by the task, or <code>null</code> if it
+     *      completed normally
+     * @throws IllegalStateException if interrupted while waiting for the task
+     */
+    public static Throwable throwableFromLargeStack(final Runnable task) {
+        final Throwable[] thrown = new Throwable[1];
+        Thread worker = new Thread(null, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    task.run();
+                } catch (Throwable t) {
+                    thrown[0] = t;
+                }
+            }
+        }, "large-stack-test", 8L * 1024L * 1024L);
+        worker.start();
+        try {
+            worker.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "Interrupted while waiting for the large stack test thread", e);
+        }
+        return thrown[0];
+    }
 }
